@@ -1,0 +1,47 @@
+# Example container run-based tests
+# Run with: python container_test_cli.py --config tests.example.yaml --image my-image:latest
+---
+tests:
+  - name: check-app-version
+    # You can use either 'command' or 'exec' (string or list of strings)
+    exec: ["--version"]
+    expect:
+      # Check the output matches a regex pattern
+      stdout_regex: "^curl ?[0-9]+\\.[0-9]+\\.[0-9]+"
+
+  - name: health-endpoint
+    command: "curl -o NUL -s -w '%{http_code}' https://www.example.com/"
+    expect:
+      exit_code: "==0" # Supports ==, !=, >=, <=, >, < or integer
+      stdout_contains: "200" # Expect stdout to contain a specific string
+      timeout_seconds: 10 # Per-test timeout in seconds
+    # Per-test run flags (merged with --run-arg). Useful for host networking, etc.
+    run_args: ["--network=host"]
+    # Example entrypoint override; useful if the image has a default entrypoint.
+    entrypoint: ""
+
+  - name: env-variable
+    exec: ["printenv", "HOME"]
+    expect:
+      stdout_contains: "/home/curl_user"
+
+  - name: log-must-be-quiet
+    command: "ls /tmp"
+    expect:
+      # Check that stdout does not contain a specific string
+      stdout_not_contains: "core"
+
+  - name: long-running-test
+    exec: ["sleep", "5"]
+    expect:
+      exit_code: 0
+    timeout_seconds: 15 # This test has a longer timeout
+
+  - name: failing-test
+    exec: ["ls", "/nonexistent"]
+    expect:
+      exit_code: "==0" # Example non-zero allowed via expression
+
+  - name: skip-this
+    skip: true # This test will be skipped
+    exec: "echo 'this will be skipped'"

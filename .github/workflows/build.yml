@@ -36,7 +36,7 @@ jobs:
       run: |
         BINARY_NAME=container-test-$(uname -s)-$(uname -m)
         mv container-test-cli $BINARY_NAME
-        echo "::set-output name=binary_name::$BINARY_NAME"
+        echo "binary_name=$BINARY_NAME" >> $GITHUB_OUTPUT
 
     - name: Create Release
       id: create_release

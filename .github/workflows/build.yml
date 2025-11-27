@@ -9,7 +9,7 @@ on:
 env:
   GO111MODULE: on
   sha_short_length: 8
-  release_version: v1.0.0
+  release_version: v1.0.1
 
 
 jobs:

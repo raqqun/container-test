@@ -32,6 +32,7 @@ jobs:
       run: go build -v ./...
 
     - name: Create Release Binary
+      id: create_release_binary
       run: |
         BINARY_NAME=container-test-$(uname -s)-$(uname -m)
         mv container-test-cli $BINARY_NAME
@@ -54,6 +55,6 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./$binary_name
-        asset_name: $binary_name
+        asset_path: ./${{ steps.create_release_binary.outputs.binary_name }}
+        asset_name: ${{ steps.create_release_binary.outputs.binary_name }}
         asset_content_type: application/vnd.github.v3+json

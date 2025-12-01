@@ -6,6 +6,11 @@ import (
 	"os"
 )
 
+var (
+    version   string
+    commitSHA string
+)
+
 // main parses flags, loads tests, executes them, and sets the exit code.
 func main() {
     var (
@@ -15,6 +20,7 @@ func main() {
         defaultTimeout int
         jsonReport     string
         failFast       bool
+        showVersion    bool
         debug          bool
     )
 
@@ -24,9 +30,15 @@ func main() {
     flag.IntVar(&defaultTimeout, "default-timeout", envInt("CONTAINER_TEST_DEFAULT_TIMEOUT", 30), "Default timeout (seconds) for each test when not specified")
     flag.StringVar(&jsonReport, "json-report", os.Getenv("CONTAINER_TEST_JSON_REPORT"), "Write a JSON report to the given path")
     flag.BoolVar(&failFast, "fail-fast", envBool("CONTAINER_TEST_FAIL_FAST", false), "Stop on first failure")
+    flag.BoolVar(&showVersion, "version", false, "Print version and exit")
     flag.BoolVar(&debug, "debug", envBool("CONTAINER_TEST_DEBUG", false), "Print commands before execution")
 
     flag.Parse()
+
+    if showVersion {
+        fmt.Printf(fmt.Sprintf("%s-%s\n", version, commitSHA))
+        os.Exit(0)
+    }
 
     if configPath == "" || image == "" {
         fmt.Fprintln(os.Stderr, "config and image are required")

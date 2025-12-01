@@ -40,7 +40,7 @@ tests:
   - name: failing-test
     exec: ["ls", "/nonexistent"]
     expect:
-      exit_code: "==0" # Example non-zero allowed via expression
+      exit_code: ">0" # Example non-zero allowed via expression
 
   - name: skip-this
     skip: true # This test will be skipped

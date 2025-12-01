@@ -21,6 +21,7 @@ func main() {
         jsonReport     string
         failFast       bool
         showVersion    bool
+        dryRun         bool
         debug          bool
     )
 
@@ -31,6 +32,7 @@ func main() {
     flag.StringVar(&jsonReport, "json-report", os.Getenv("CONTAINER_TEST_JSON_REPORT"), "Write a JSON report to the given path")
     flag.BoolVar(&failFast, "fail-fast", envBool("CONTAINER_TEST_FAIL_FAST", false), "Stop on first failure")
     flag.BoolVar(&showVersion, "version", false, "Print version and exit")
+    flag.BoolVar(&dryRun, "dry-run", envBool("CONTAINER_TEST_DRY_RUN", false), "Print commands without executing them")
     flag.BoolVar(&debug, "debug", envBool("CONTAINER_TEST_DEBUG", false), "Print commands before execution")
 
     flag.Parse()
@@ -62,7 +64,7 @@ func main() {
             name = fmt.Sprintf("test-%d", idx+1)
         }
         fmt.Printf("==> %s\n", name)
-        res := runSingleTest(engine, image, t, defaultTimeout, debug)
+        res := runSingleTest(engine, image, t, defaultTimeout, debug, dryRun)
         statusColored := colorize(res.Status, res.Status, enableColor)
         fmt.Printf("   %s\n", statusColored)
         if len(res.Failures) > 0 {

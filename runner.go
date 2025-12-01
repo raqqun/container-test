@@ -80,7 +80,7 @@ func evalExpectations(expect expectBlock, stdout, stderr string, exitCode int) [
 }
 
 // runSingleTest executes a single container run and evaluates expectations.
-func runSingleTest(engine, image string, t testCase, defaultTimeout int, debug bool) testResult {
+func runSingleTest(engine, image string, t testCase, defaultTimeout int, debug bool, dryRun bool) testResult {
 	if t.Skip {
 		return testResult{Status: "SKIPPED", Name: firstNonEmpty(t.Name, "unnamed")}
 	}
@@ -110,6 +110,12 @@ func runSingleTest(engine, image string, t testCase, defaultTimeout int, debug b
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Second)
 	defer cancel()
 
+	if dryRun {
+		runCmd := buildRunCommand(engine, image, []string(command), t.Workdir, t.Env, runArgs, entrypoint)
+		fmt.Printf("[dry-run] would run: %s (timeout=%ds)\n", strings.Join(runCmd, " "), timeout)
+		return testResult{Status: "SKIPPED", Name: firstNonEmpty(t.Name, "unnamed")}
+	}
+	
 	runCmd := buildRunCommand(engine, image, []string(command), t.Workdir, t.Env, runArgs, entrypoint)
 	if debug {
 		fmt.Printf("[debug] running: %s (timeout=%ds)\n", strings.Join(runCmd, " "), timeout)

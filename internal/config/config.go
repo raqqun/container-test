@@ -1,4 +1,4 @@
-package main
+package config
 
 import (
 	"fmt"
@@ -9,11 +9,11 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// stringOrSlice allows YAML fields to be single string or list.
-type stringOrSlice []string
+// StringOrSlice allows YAML fields to be single string or list.
+type StringOrSlice []string
 
 // UnmarshalYAML allows either a single string or a list of strings in YAML.
-func (s *stringOrSlice) UnmarshalYAML(value *yaml.Node) error {
+func (s *StringOrSlice) UnmarshalYAML(value *yaml.Node) error {
 	switch value.Kind {
 	case yaml.ScalarNode:
 		*s = []string{value.Value}
@@ -30,11 +30,11 @@ func (s *stringOrSlice) UnmarshalYAML(value *yaml.Node) error {
 	}
 }
 
-// commandValue holds a normalized argv form of a command.
-type commandValue []string
+// CommandValue holds a normalized argv form of a command.
+type CommandValue []string
 
 // UnmarshalYAML accepts either a shell string (wrapped with sh -c) or argv list.
-func (c *commandValue) UnmarshalYAML(value *yaml.Node) error {
+func (c *CommandValue) UnmarshalYAML(value *yaml.Node) error {
 	switch value.Kind {
 	case yaml.ScalarNode:
 		*c = []string{"sh", "-c", value.Value}
@@ -51,30 +51,30 @@ func (c *commandValue) UnmarshalYAML(value *yaml.Node) error {
 	}
 }
 
-// expectBlock defines assertions for a test's stdout/stderr/exit code.
-type expectBlock struct {
-	ExitCode       *exitCodeExpect `yaml:"exit_code" json:"exit_code,omitempty"`
-	StdoutContains stringOrSlice   `yaml:"stdout_contains" json:"stdout_contains,omitempty"`
-	StdoutNot      stringOrSlice   `yaml:"stdout_not_contains" json:"stdout_not_contains,omitempty"`
-	StderrContains stringOrSlice   `yaml:"stderr_contains" json:"stderr_contains,omitempty"`
+// ExpectBlock defines assertions for a test's stdout/stderr/exit code.
+type ExpectBlock struct {
+	ExitCode       *ExitCodeExpect `yaml:"exit_code" json:"exit_code,omitempty"`
+	StdoutContains StringOrSlice   `yaml:"stdout_contains" json:"stdout_contains,omitempty"`
+	StdoutNot      StringOrSlice   `yaml:"stdout_not_contains" json:"stdout_not_contains,omitempty"`
+	StderrContains StringOrSlice   `yaml:"stderr_contains" json:"stderr_contains,omitempty"`
 	StdoutRegex    string          `yaml:"stdout_regex" json:"stdout_regex,omitempty"`
 	StderrRegex    string          `yaml:"stderr_regex" json:"stderr_regex,omitempty"`
 	TimeoutSeconds *int            `yaml:"timeout_seconds" json:"timeout_seconds,omitempty"`
 }
 
-// exitCodeExpect holds a parsed exit-code expression like ==0, >=1, !=0, <2.
-type exitCodeExpect struct {
+// ExitCodeExpect holds a parsed exit-code expression like ==0, >=1, !=0, <2.
+type ExitCodeExpect struct {
 	Op     string `json:"op"`
 	Value  int    `json:"value"`
 	RawInt *int   `json:"raw,omitempty"` // preserve original int for reporting/compatibility
 }
 
-func (e exitCodeExpect) String() string {
+func (e ExitCodeExpect) String() string {
 	return fmt.Sprintf("%s%d", e.Op, e.Value)
 }
 
-// satisfiedBy checks whether the actual exit code matches the expectation.
-func (e exitCodeExpect) satisfiedBy(actual int) bool {
+// SatisfiedBy checks whether the actual exit code matches the expectation.
+func (e ExitCodeExpect) SatisfiedBy(actual int) bool {
 	switch e.Op {
 	case "==":
 		return actual == e.Value
@@ -94,7 +94,7 @@ func (e exitCodeExpect) satisfiedBy(actual int) bool {
 }
 
 // UnmarshalYAML accepts an int or a comparison expression string (==, !=, >=, <=, >, <).
-func (e *exitCodeExpect) UnmarshalYAML(value *yaml.Node) error {
+func (e *ExitCodeExpect) UnmarshalYAML(value *yaml.Node) error {
 	if value.Kind != yaml.ScalarNode {
 		return fmt.Errorf("exit_code must be an int or comparison expression")
 	}
@@ -127,37 +127,27 @@ func (e *exitCodeExpect) UnmarshalYAML(value *yaml.Node) error {
 	return nil
 }
 
-// testCase models a single test definition from YAML.
-type testCase struct {
+// TestCase models a single test definition from YAML.
+type TestCase struct {
 	Name       string            `yaml:"name" json:"name"`
-	Exec       commandValue      `yaml:"exec" json:"exec"`
-	Command    commandValue      `yaml:"command" json:"command"`
+	Exec       CommandValue      `yaml:"exec" json:"exec"`
+	Command    CommandValue      `yaml:"command" json:"command"`
 	Skip       bool              `yaml:"skip" json:"skip"`
 	Workdir    string            `yaml:"workdir" json:"workdir,omitempty"`
 	Env        map[string]string `yaml:"env" json:"env,omitempty"`
-	Expect     expectBlock       `yaml:"expect" json:"expect,omitempty"`
+	Expect     ExpectBlock       `yaml:"expect" json:"expect,omitempty"`
 	RunArgs    []string          `yaml:"run_args" json:"run_args,omitempty"`
 	Entrypoint *string           `yaml:"entrypoint" json:"entrypoint,omitempty"`
 	Timeout    *int              `yaml:"timeout_seconds" json:"timeout_seconds,omitempty"`
 }
 
-// testResult captures the outcome of running a single test.
-type testResult struct {
-	Status   string   `json:"status"`
-	Name     string   `json:"name"`
-	Stdout   string   `json:"stdout"`
-	Stderr   string   `json:"stderr"`
-	ExitCode *int     `json:"exit_code"`
-	Failures []string `json:"failures,omitempty"`
-}
-
-// testList holds all parsed test cases.
-type testList []testCase
+// TestList holds all parsed test cases.
+type TestList []TestCase
 
 // UnmarshalYAML supports a root sequence or {tests: []}.
-func (tl *testList) UnmarshalYAML(value *yaml.Node) error {
+func (tl *TestList) UnmarshalYAML(value *yaml.Node) error {
 	if value.Kind == yaml.SequenceNode {
-		var tests []testCase
+		var tests []TestCase
 		if err := value.Decode(&tests); err != nil {
 			return err
 		}
@@ -166,7 +156,7 @@ func (tl *testList) UnmarshalYAML(value *yaml.Node) error {
 	}
 	if value.Kind == yaml.MappingNode {
 		var container struct {
-			Tests []testCase `yaml:"tests"`
+			Tests []TestCase `yaml:"tests"`
 		}
 		if err := value.Decode(&container); err != nil {
 			return err
@@ -177,13 +167,13 @@ func (tl *testList) UnmarshalYAML(value *yaml.Node) error {
 	return fmt.Errorf("config must be a list or contain a 'tests' list")
 }
 
-// loadTests reads and parses the YAML test definitions.
-func loadTests(path string) (testList, error) {
+// LoadTests reads and parses the YAML test definitions.
+func LoadTests(path string) (TestList, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
-	var tests testList
+	var tests TestList
 	if err := yaml.Unmarshal(data, &tests); err != nil {
 		return nil, err
 	}

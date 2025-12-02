@@ -17,48 +17,48 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    
-    - name: Set up Go
-      uses: actions/setup-go@v2
-      with:
-        go-version: ^1.22
 
-    - uses: actions/checkout@v2
+      - name: Set up Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: ^1.22
 
-    - name: Get Short SHA
-      id: short_sha
-      run: echo "GIT_SHORT_SHA=$(git rev-parse --short=${{ env.sha_short_length }} HEAD)" >> $GITHUB_ENV
+      - uses: actions/checkout@v2
 
-    # - name: Run Tests
-    #   run: go test -v ./...
+      - name: Get Short SHA
+        id: short_sha
+        run: echo "GIT_SHORT_SHA=$(git rev-parse --short=${{ env.sha_short_length }} HEAD)" >> $GITHUB_ENV
 
-    - name: Build
-      run: go build -ldflags "-X main.commitSHA=$GIT_SHORT_SHA -X main.version=${{ env.release_version }}" ./...
+      # - name: Run Tests
+      #   run: go test -v ./...
 
-    - name: Create Release Binary
-      id: create_release_binary
-      run: |
-        BINARY_NAME=container-test-$(uname -s)-$(uname -m)
-        mv container-test-cli $BINARY_NAME
-        echo "binary_name=$BINARY_NAME" >> $GITHUB_OUTPUT
+      - name: Build
+        run: go build -ldflags "-X container-test-cli/internal/version.Version=${{ env.release_version }}-$GIT_SHORT_SHA" ./...
 
-    - name: Create Release
-      id: create_release
-      uses: comnoco/create-release-action@v2
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        tag_name: ${{ env.release_version }}
-        release_name: Release ${{ env.release_version }}
-        draft: false
-        prerelease: true
+      - name: Create Release Binary
+        id: create_release_binary
+        run: |
+          BINARY_NAME=container-test-$(go env GOOS)-$(go env GOARCH)
+          mv container-test-cli $BINARY_NAME
+          echo "binary_name=$BINARY_NAME" >> $GITHUB_OUTPUT
 
-    - name: Upload Release Asset
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./${{ steps.create_release_binary.outputs.binary_name }}
-        asset_name: ${{ steps.create_release_binary.outputs.binary_name }}
-        asset_content_type: application/vnd.github.v3+json
+      - name: Create Release
+        id: create_release
+        uses: comnoco/create-release-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ env.release_version }}
+          release_name: Release ${{ env.release_version }}
+          draft: false
+          prerelease: true
+
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./${{ steps.create_release_binary.outputs.binary_name }}
+          asset_name: ${{ steps.create_release_binary.outputs.binary_name }}
+          asset_content_type: application/vnd.github.v3+json

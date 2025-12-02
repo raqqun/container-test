@@ -1,4 +1,4 @@
-package main
+package runner
 
 import (
 	"bytes"
@@ -8,10 +8,22 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"container-test-cli/internal/config"
 )
 
-// buildRunCommand assembles the engine run command with env, workdir, args, and entrypoint.
-func buildRunCommand(engine, image string, cmd []string, workdir string, env map[string]string, runArgs []string, entrypoint *string) []string {
+// Result captures the outcome of running a single test.
+type Result struct {
+	Status   string   `json:"status"`
+	Name     string   `json:"name"`
+	Stdout   string   `json:"stdout"`
+	Stderr   string   `json:"stderr"`
+	ExitCode *int     `json:"exit_code"`
+	Failures []string `json:"failures,omitempty"`
+}
+
+// BuildRunCommand assembles the engine run command with env, workdir, args, and entrypoint.
+func BuildRunCommand(engine, image string, cmd []string, workdir string, env map[string]string, runArgs []string, entrypoint *string) []string {
 	args := []string{engine, "run", "--rm"}
 	args = append(args, runArgs...)
 	if entrypoint != nil {
@@ -39,13 +51,13 @@ func firstNonEmpty(values ...string) string {
 }
 
 // evalExpectations applies the expectBlock rules to collected outputs.
-func evalExpectations(expect expectBlock, stdout, stderr string, exitCode int) []string {
+func evalExpectations(expect config.ExpectBlock, stdout, stderr string, exitCode int) []string {
 	failures := []string{}
-	expectedExit := exitCodeExpect{Op: "==", Value: 0}
+	expectedExit := config.ExitCodeExpect{Op: "==", Value: 0}
 	if expect.ExitCode != nil {
 		expectedExit = *expect.ExitCode
 	}
-	if !expectedExit.satisfiedBy(exitCode) {
+	if !expectedExit.SatisfiedBy(exitCode) {
 		failures = append(failures, fmt.Sprintf("exit code %d != expected %s", exitCode, expectedExit.String()))
 	}
 
@@ -79,10 +91,10 @@ func evalExpectations(expect expectBlock, stdout, stderr string, exitCode int) [
 	return failures
 }
 
-// runSingleTest executes a single container run and evaluates expectations.
-func runSingleTest(engine, image string, t testCase, defaultTimeout int, debug bool, dryRun bool) testResult {
+// RunSingleTest executes a single container run and evaluates expectations.
+func RunSingleTest(engine, image string, t config.TestCase, defaultTimeout int, debug bool) Result {
 	if t.Skip {
-		return testResult{Status: "SKIPPED", Name: firstNonEmpty(t.Name, "unnamed")}
+		return Result{Status: "SKIPPED", Name: firstNonEmpty(t.Name, "unnamed")}
 	}
 
 	command := t.Exec
@@ -90,7 +102,7 @@ func runSingleTest(engine, image string, t testCase, defaultTimeout int, debug b
 		command = t.Command
 	}
 	if len(command) == 0 {
-		return testResult{
+		return Result{
 			Status:   "FAILED",
 			Name:     firstNonEmpty(t.Name, "unnamed"),
 			Failures: []string{"missing 'exec' or 'command'"},
@@ -110,13 +122,7 @@ func runSingleTest(engine, image string, t testCase, defaultTimeout int, debug b
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Second)
 	defer cancel()
 
-	if dryRun {
-		runCmd := buildRunCommand(engine, image, []string(command), t.Workdir, t.Env, runArgs, entrypoint)
-		fmt.Printf("[dry-run] would run: %s (timeout=%ds)\n", strings.Join(runCmd, " "), timeout)
-		return testResult{Status: "SKIPPED", Name: firstNonEmpty(t.Name, "unnamed")}
-	}
-	
-	runCmd := buildRunCommand(engine, image, []string(command), t.Workdir, t.Env, runArgs, entrypoint)
+	runCmd := BuildRunCommand(engine, image, []string(command), t.Workdir, t.Env, runArgs, entrypoint)
 	if debug {
 		fmt.Printf("[debug] running: %s (timeout=%ds)\n", strings.Join(runCmd, " "), timeout)
 	}
@@ -132,7 +138,7 @@ func runSingleTest(engine, image string, t testCase, defaultTimeout int, debug b
 
 	if err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
-			return testResult{
+			return Result{
 				Status:   "FAILED",
 				Name:     firstNonEmpty(t.Name, "unnamed"),
 				Stdout:   stdout,
@@ -144,7 +150,7 @@ func runSingleTest(engine, image string, t testCase, defaultTimeout int, debug b
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			exitCode = exitErr.ExitCode()
 		} else {
-			return testResult{
+			return Result{
 				Status:   "FAILED",
 				Name:     firstNonEmpty(t.Name, "unnamed"),
 				Stdout:   stdout,
@@ -161,7 +167,7 @@ func runSingleTest(engine, image string, t testCase, defaultTimeout int, debug b
 		status = "FAILED"
 	}
 
-	return testResult{
+	return Result{
 		Status:   status,
 		Name:     firstNonEmpty(t.Name, "unnamed"),
 		Stdout:   stdout,

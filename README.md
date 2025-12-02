@@ -6,32 +6,35 @@ Run declarative smoke tests against container images. The CLI reads a YAML file 
 - Uses any container engine CLI (`docker`, `podman`, etc.) with per-test `run_args` and optional entrypoint override.
 - Assertions on exit code, stdout/stderr substrings, and regex matches; supports negative stdout checks.
 - Per-test environment variables, working directory, and timeouts (with a global default).
-- `--fail-fast`, optional JSON report output, and colorized status (respecting `NO_COLOR`).
+- `-fail-fast`, optional JSON report output, and colorized status (respecting `NO_COLOR`).
+- Dry-run and debug modes; `-version` for build info.
 - Accepts either a root list of tests or a `{tests: []}` object for YAML configs.
 
 ## Requirements
-- Container engine CLI available on the host (default: `docker`; override via `--engine` or `CONTAINER_TEST_ENGINE`).
+- Container engine CLI available on the host (default: `docker`; override via `-engine` or `CONTAINER_TEST_ENGINE`).
 - Go 1.22+ to build from source.
 
 ## Build
 ```sh
-go build -o container-test-cli
+go build -o container-test-cli ./cmd/container-test-cli
 ```
 
 ## Usage
 ```sh
-./container-test-cli --config tests.example.yaml --image curlimages/curl:latest
+./container-test-cli -config tests.example.yaml -image curlimages/curl:latest
 ```
 
 ### Flags and env vars
-All flags have environment variable counterparts:
-- `--config` / `CONTAINER_TEST_CONFIG` (required): path to YAML file.
-- `--image` / `CONTAINER_TEST_IMAGE` (required): container image reference.
-- `--engine` / `CONTAINER_TEST_ENGINE` : container CLI (default `docker`).
-- `--default-timeout` / `CONTAINER_TEST_DEFAULT_TIMEOUT`: per-test timeout in seconds (default 30).
-- `--json-report` / `CONTAINER_TEST_JSON_REPORT`: path to write JSON results.
-- `--fail-fast` / `CONTAINER_TEST_FAIL_FAST`: stop on first failure.
-- `--debug` / `CONTAINER_TEST_DEBUG`: print constructed `run` commands.
+All flags have environment variable counterparts except `-version`:
+- `-config` / `CONTAINER_TEST_CONFIG` (required): path to YAML file.
+- `-image` / `CONTAINER_TEST_IMAGE` (required): container image reference.
+- `-engine` / `CONTAINER_TEST_ENGINE` : container CLI (default `docker`).
+- `-default-timeout` / `CONTAINER_TEST_DEFAULT_TIMEOUT`: per-test timeout in seconds (default 30).
+- `-json-report` / `CONTAINER_TEST_JSON_REPORT`: path to write JSON results.
+- `-fail-fast` / `CONTAINER_TEST_FAIL_FAST`: stop on first failure.
+- `-dry-run` / `CONTAINER_TEST_DRY_RUN`: print commands without executing.
+- `-debug` / `CONTAINER_TEST_DEBUG`: print constructed `run` commands.
+- `-version`: print build version and exit (no env var).
 
 ## Test file format
 The YAML can be either a top-level list or a map with a `tests` key. Command fields accept a single string (wrapped with `sh -c`) or a list (exec form).

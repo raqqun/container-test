@@ -1,5 +1,5 @@
 # Example container run-based tests
-# Run with: python container_test_cli.py --config tests.example.yaml --image my-image:latest
+# Run with: ./container-test-cli -config tests.example.yaml -image curlimages/curl:latest
 ---
 tests:
   - name: check-app-version
@@ -41,6 +41,7 @@ tests:
     exec: ["ls", "/nonexistent"]
     expect:
       exit_code: ">0" # Example non-zero allowed via expression
+      stderr_contains: ["No such file or directory"]
 
   - name: skip-this
     skip: true # This test will be skipped

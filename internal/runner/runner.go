@@ -51,7 +51,7 @@ func firstNonEmpty(values ...string) string {
 }
 
 // evalExpectations applies the expectBlock rules to collected outputs.
-func evalExpectations(expect config.ExpectBlock, stdout, stderr string, exitCode int) []string {
+func evalExpectations(expect config.ExpectBlock, stdout string, stderr string, exitCode int) []string {
 	failures := []string{}
 	expectedExit := config.ExitCodeExpect{Op: "==", Value: 0}
 	if expect.ExitCode != nil {

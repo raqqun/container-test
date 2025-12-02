@@ -3,6 +3,7 @@ package runner
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os/exec"
 	"regexp"
@@ -20,6 +21,16 @@ type Result struct {
 	Stderr   string   `json:"stderr"`
 	ExitCode *int     `json:"exit_code"`
 	Failures []string `json:"failures,omitempty"`
+}
+
+// firstNonEmpty returns the first non-empty string.
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 // BuildRunCommand assembles the engine run command with env, workdir, args, and entrypoint.
@@ -40,19 +51,45 @@ func BuildRunCommand(engine, image string, cmd []string, workdir string, env map
 	return args
 }
 
-// firstNonEmpty returns the first non-empty string.
-func firstNonEmpty(values ...string) string {
-	for _, v := range values {
-		if v != "" {
-			return v
+// checkContains verifies that output contains all expected strings.
+func checkContains(output string, expectedStrings []string, outputName string) []string {
+	var failures []string
+	for _, needle := range expectedStrings {
+		if !strings.Contains(output, needle) {
+			failures = append(failures, fmt.Sprintf("%s missing: %q", outputName, needle))
 		}
 	}
-	return ""
+	return failures
+}
+
+// checkNotContains verifies that output does not contain forbidden strings.
+func checkNotContains(output string, forbiddenStrings []string, outputName string) []string {
+	var failures []string
+	for _, needle := range forbiddenStrings {
+		if strings.Contains(output, needle) {
+			failures = append(failures, fmt.Sprintf("%s must not contain: %q", outputName, needle))
+		}
+	}
+	return failures
+}
+
+// checkRegex verifies that output matches the given regex pattern.
+func checkRegex(output, pattern, outputName string) []string {
+	if pattern == "" {
+		return nil
+	}
+	re := regexp.MustCompile(pattern)
+	if !re.MatchString(output) {
+		return []string{fmt.Sprintf("%s does not match regex %q", outputName, pattern)}
+	}
+	return nil
 }
 
 // evalExpectations applies the expectBlock rules to collected outputs.
-func evalExpectations(expect config.ExpectBlock, stdout string, stderr string, exitCode int) []string {
-	failures := []string{}
+func evalExpectations(expect config.ExpectBlock, stdout, stderr string, exitCode int) []string {
+	var failures []string
+
+	// Check exit code
 	expectedExit := config.ExitCodeExpect{Op: "==", Value: 0}
 	if expect.ExitCode != nil {
 		expectedExit = *expect.ExitCode
@@ -61,68 +98,50 @@ func evalExpectations(expect config.ExpectBlock, stdout string, stderr string, e
 		failures = append(failures, fmt.Sprintf("exit code %d != expected %s", exitCode, expectedExit.String()))
 	}
 
-	for _, needle := range expect.StdoutContains {
-		if !strings.Contains(stdout, needle) {
-			failures = append(failures, fmt.Sprintf("stdout missing: %q", needle))
-		}
-	}
-	for _, needle := range expect.StdoutNot {
-		if strings.Contains(stdout, needle) {
-			failures = append(failures, fmt.Sprintf("stdout must not contain: %q", needle))
-		}
-	}
-	for _, needle := range expect.StderrContains {
-		if !strings.Contains(stderr, needle) {
-			failures = append(failures, fmt.Sprintf("stderr missing: %q", needle))
-		}
-	}
-	if expect.StdoutRegex != "" {
-		re := regexp.MustCompile(expect.StdoutRegex)
-		if !re.MatchString(stdout) {
-			failures = append(failures, fmt.Sprintf("stdout does not match regex %q", expect.StdoutRegex))
-		}
-	}
-	if expect.StderrRegex != "" {
-		re := regexp.MustCompile(expect.StderrRegex)
-		if !re.MatchString(stderr) {
-			failures = append(failures, fmt.Sprintf("stderr does not match regex %q", expect.StderrRegex))
-		}
-	}
+	// Check stdout expectations
+	failures = append(failures, checkContains(stdout, expect.StdoutContains, "stdout")...)
+	failures = append(failures, checkNotContains(stdout, expect.StdoutNot, "stdout")...)
+	failures = append(failures, checkRegex(stdout, expect.StdoutRegex, "stdout")...)
+
+	// Check stderr expectations
+	failures = append(failures, checkContains(stderr, expect.StderrContains, "stderr")...)
+	failures = append(failures, checkRegex(stderr, expect.StderrRegex, "stderr")...)
+
 	return failures
 }
 
 // RunSingleTest executes a single container run and evaluates expectations.
-func RunSingleTest(engine, image string, t config.TestCase, defaultTimeout int, debug bool) Result {
-	if t.Skip {
-		return Result{Status: "SKIPPED", Name: firstNonEmpty(t.Name, "unnamed")}
+func RunSingleTest(engine, image string, testCase config.TestCase, defaultTimeout int, debug bool) Result {
+	if testCase.Skip {
+		return Result{Status: "SKIPPED", Name: firstNonEmpty(testCase.Name, "unnamed")}
 	}
 
-	command := t.Exec
+	command := testCase.Exec
 	if len(command) == 0 {
-		command = t.Command
+		command = testCase.Command
 	}
 	if len(command) == 0 {
 		return Result{
 			Status:   "FAILED",
-			Name:     firstNonEmpty(t.Name, "unnamed"),
+			Name:     firstNonEmpty(testCase.Name, "unnamed"),
 			Failures: []string{"missing 'exec' or 'command'"},
 		}
 	}
 
-	runArgs := t.RunArgs
-	entrypoint := t.Entrypoint
+	runArgs := testCase.RunArgs
+	entrypoint := testCase.Entrypoint
 
 	timeout := defaultTimeout
-	if t.Expect.TimeoutSeconds != nil {
-		timeout = *t.Expect.TimeoutSeconds
+	if testCase.Expect.TimeoutSeconds != nil {
+		timeout = *testCase.Expect.TimeoutSeconds
 	}
-	if t.Timeout != nil {
-		timeout = *t.Timeout
+	if testCase.Timeout != nil {
+		timeout = *testCase.Timeout
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Second)
 	defer cancel()
 
-	runCmd := BuildRunCommand(engine, image, []string(command), t.Workdir, t.Env, runArgs, entrypoint)
+	runCmd := BuildRunCommand(engine, image, command, testCase.Workdir, testCase.Env, runArgs, entrypoint)
 	if debug {
 		fmt.Printf("[debug] running: %s (timeout=%ds)\n", strings.Join(runCmd, " "), timeout)
 	}
@@ -140,19 +159,20 @@ func RunSingleTest(engine, image string, t config.TestCase, defaultTimeout int, 
 		if ctx.Err() == context.DeadlineExceeded {
 			return Result{
 				Status:   "FAILED",
-				Name:     firstNonEmpty(t.Name, "unnamed"),
+				Name:     firstNonEmpty(testCase.Name, "unnamed"),
 				Stdout:   stdout,
 				Stderr:   stderr,
 				ExitCode: nil,
 				Failures: []string{fmt.Sprintf("timed out after %ds", timeout)},
 			}
 		}
-		if exitErr, ok := err.(*exec.ExitError); ok {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
 			exitCode = exitErr.ExitCode()
 		} else {
 			return Result{
 				Status:   "FAILED",
-				Name:     firstNonEmpty(t.Name, "unnamed"),
+				Name:     firstNonEmpty(testCase.Name, "unnamed"),
 				Stdout:   stdout,
 				Stderr:   stderr,
 				ExitCode: nil,
@@ -161,7 +181,7 @@ func RunSingleTest(engine, image string, t config.TestCase, defaultTimeout int, 
 		}
 	}
 
-	failures := evalExpectations(t.Expect, stdout, stderr, exitCode)
+	failures := evalExpectations(testCase.Expect, stdout, stderr, exitCode)
 	status := "PASSED"
 	if len(failures) > 0 {
 		status = "FAILED"
@@ -169,7 +189,7 @@ func RunSingleTest(engine, image string, t config.TestCase, defaultTimeout int, 
 
 	return Result{
 		Status:   status,
-		Name:     firstNonEmpty(t.Name, "unnamed"),
+		Name:     firstNonEmpty(testCase.Name, "unnamed"),
 		Stdout:   stdout,
 		Stderr:   stderr,
 		ExitCode: &exitCode,

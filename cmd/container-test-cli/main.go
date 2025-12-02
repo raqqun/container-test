@@ -13,96 +13,134 @@ import (
 	"container-test-cli/internal/version"
 )
 
-// main parses flags, loads tests, executes them, and sets the exit code.
-func main() {
-	var (
-		configPath     string
-		image          string
-		engine         string
-		defaultTimeout int
-		jsonReport     string
-		failFast       bool
-		debug          bool
-		dryRun         bool
-		showVersion    bool
-	)
+// cliConfig holds all command-line configuration.
+type cliConfig struct {
+	configPath     string
+	image          string
+	engine         string
+	defaultTimeout int
+	jsonReport     string
+	failFast       bool
+	debug          bool
+	dryRun         bool
+	showVersion    bool
+}
 
-	flag.StringVar(&configPath, "config", os.Getenv("CONTAINER_TEST_CONFIG"), "Path to YAML file describing tests")
-	flag.StringVar(&image, "image", os.Getenv("CONTAINER_TEST_IMAGE"), "Image reference to run")
-	flag.StringVar(&engine, "engine", env.GetenvDefault("CONTAINER_TEST_ENGINE", "docker"), "Container engine CLI to use (docker, podman, ...)")
-	flag.IntVar(&defaultTimeout, "default-timeout", env.EnvInt("CONTAINER_TEST_DEFAULT_TIMEOUT", 30), "Default timeout (seconds) for each test when not specified")
-	flag.StringVar(&jsonReport, "json-report", os.Getenv("CONTAINER_TEST_JSON_REPORT"), "Write a JSON report to the given path")
-	flag.BoolVar(&failFast, "fail-fast", env.EnvBool("CONTAINER_TEST_FAIL_FAST", false), "Stop on first failure")
-	flag.BoolVar(&debug, "debug", env.EnvBool("CONTAINER_TEST_DEBUG", false), "Print commands before execution")
-	flag.BoolVar(&dryRun, "dry-run", env.EnvBool("CONTAINER_TEST_DRY_RUN", false), "Print commands without executing")
-	flag.BoolVar(&showVersion, "version", false, "Print version and exit")
+// parseFlags parses and validates command-line flags.
+func parseFlags() *cliConfig {
+	cfg := &cliConfig{}
+
+	flag.StringVar(&cfg.configPath, "config", os.Getenv("CONTAINER_TEST_CONFIG"), "Path to YAML file describing tests")
+	flag.StringVar(&cfg.image, "image", os.Getenv("CONTAINER_TEST_IMAGE"), "Image reference to run")
+	flag.StringVar(&cfg.engine, "engine", env.GetenvDefault("CONTAINER_TEST_ENGINE", "docker"), "Container engine CLI to use (docker, podman, ...)")
+	flag.IntVar(&cfg.defaultTimeout, "default-timeout", env.EnvInt("CONTAINER_TEST_DEFAULT_TIMEOUT", 30), "Default timeout (seconds) for each test when not specified")
+	flag.StringVar(&cfg.jsonReport, "json-report", os.Getenv("CONTAINER_TEST_JSON_REPORT"), "Write a JSON report to the given path")
+	flag.BoolVar(&cfg.failFast, "fail-fast", env.EnvBool("CONTAINER_TEST_FAIL_FAST", false), "Stop on first failure")
+	flag.BoolVar(&cfg.debug, "debug", env.EnvBool("CONTAINER_TEST_DEBUG", false), "Print commands before execution")
+	flag.BoolVar(&cfg.dryRun, "dry-run", env.EnvBool("CONTAINER_TEST_DRY_RUN", false), "Print commands without executing")
+	flag.BoolVar(&cfg.showVersion, "version", false, "Print version and exit")
 
 	flag.Parse()
 
-	if showVersion {
+	if cfg.showVersion {
 		fmt.Println(version.Version)
-		return
+		os.Exit(0)
 	}
 
-	if configPath == "" || image == "" {
+	if cfg.configPath == "" || cfg.image == "" {
 		fmt.Fprintln(os.Stderr, "config and image are required")
 		flag.Usage()
 		os.Exit(2)
 	}
 
-	tests, err := config.LoadTests(configPath)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to load tests: %v\n", err)
-		os.Exit(2)
-	}
+	return cfg
+}
 
+// getTestName returns the test name or generates a default one.
+func getTestName(testCase config.TestCase, index int) string {
+	if testCase.Name != "" {
+		return testCase.Name
+	}
+	return fmt.Sprintf("test-%d", index+1)
+}
+
+// getCommand resolves the command from either Exec or Command field.
+func getCommand(testCase config.TestCase) []string {
+	if len(testCase.Exec) > 0 {
+		return testCase.Exec
+	}
+	return testCase.Command
+}
+
+// handleDryRun prints the command that would be executed without running it.
+func handleDryRun(engine, image string, testCase config.TestCase, name string) runner.Result {
+	command := getCommand(testCase)
+	runCmd := runner.BuildRunCommand(engine, image, command, testCase.Workdir, testCase.Env, testCase.RunArgs, testCase.Entrypoint)
+	fmt.Printf("   [dry-run] %s\n", strings.Join(runCmd, " "))
+	return runner.Result{
+		Status: "DRY-RUN",
+		Name:   name,
+	}
+}
+
+// printTestResult displays the test result with color and failure details.
+func printTestResult(res runner.Result, enableColor bool) {
+	statusColored := output.Colorize(res.Status, res.Status, enableColor)
+	fmt.Printf("   %s\n", statusColored)
+	for _, failure := range res.Failures {
+		fmt.Printf("     - %s\n", failure)
+	}
+}
+
+// runTests executes all tests and returns the results and failure count.
+func runTests(cfg *cliConfig, tests []config.TestCase) ([]runner.Result, int) {
 	enableColor := os.Getenv("NO_COLOR") == ""
 	results := make([]runner.Result, 0, len(tests))
 	failures := 0
 
-	for idx, t := range tests {
-		name := t.Name
-		if name == "" {
-			name = fmt.Sprintf("test-%d", idx+1)
-		}
+	for idx, testCase := range tests {
+		name := getTestName(testCase, idx)
 		fmt.Printf("==> %s\n", name)
 
-		if dryRun {
-			command := t.Exec
-			if len(command) == 0 {
-				command = t.Command
+		var res runner.Result
+		if cfg.dryRun {
+			res = handleDryRun(cfg.engine, cfg.image, testCase, name)
+		} else {
+			res = runner.RunSingleTest(cfg.engine, cfg.image, testCase, cfg.defaultTimeout, cfg.debug)
+			printTestResult(res, enableColor)
+			if len(res.Failures) > 0 {
+				failures++
 			}
-			runCmd := runner.BuildRunCommand(engine, image, []string(command), t.Workdir, t.Env, t.RunArgs, t.Entrypoint)
-			fmt.Printf("   [dry-run] %s\n", strings.Join(runCmd, " "))
-			results = append(results, runner.Result{
-				Status: "DRY-RUN",
-				Name:   name,
-			})
-			continue
 		}
 
-		res := runner.RunSingleTest(engine, image, t, defaultTimeout, debug)
-		statusColored := output.Colorize(res.Status, res.Status, enableColor)
-		fmt.Printf("   %s\n", statusColored)
-		if len(res.Failures) > 0 {
-			failures++
-			for _, f := range res.Failures {
-				fmt.Printf("     - %s\n", f)
-			}
-		}
 		results = append(results, res)
-		if failFast && failures > 0 {
+		if cfg.failFast && failures > 0 {
 			fmt.Println("Stopping due to fail-fast")
 			break
 		}
 	}
 
-	if jsonReport != "" {
-		if err := output.WriteReport(jsonReport, results); err != nil {
+	return results, failures
+}
+
+// main parses flags, loads tests, executes them, and sets the exit code.
+func main() {
+	cfg := parseFlags()
+
+	tests, err := config.LoadTests(cfg.configPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to load tests: %v\n", err)
+		os.Exit(2)
+	}
+
+	results, failures := runTests(cfg, tests)
+
+	if cfg.jsonReport != "" {
+		if err := output.WriteReport(cfg.jsonReport, results); err != nil {
 			fmt.Fprintf(os.Stderr, "Failed to write report: %v\n", err)
 			os.Exit(2)
 		}
-		fmt.Printf("Wrote report to %s\n", jsonReport)
+		fmt.Printf("Wrote report to %s\n", cfg.jsonReport)
 	}
 
 	if failures > 0 {

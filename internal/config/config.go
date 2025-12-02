@@ -19,14 +19,14 @@ func (s *StringOrSlice) UnmarshalYAML(value *yaml.Node) error {
 		*s = []string{value.Value}
 		return nil
 	case yaml.SequenceNode:
-		out := make([]string, 0, len(value.Content))
-		for _, n := range value.Content {
-			out = append(out, n.Value)
+		result := make([]string, 0, len(value.Content))
+		for _, node := range value.Content {
+			result = append(result, node.Value)
 		}
-		*s = out
+		*s = result
 		return nil
 	default:
-		return fmt.Errorf("value must be string or list")
+		return fmt.Errorf("value must be a string or a list of strings")
 	}
 }
 
@@ -41,13 +41,13 @@ func (c *CommandValue) UnmarshalYAML(value *yaml.Node) error {
 		return nil
 	case yaml.SequenceNode:
 		result := make([]string, 0, len(value.Content))
-		for _, n := range value.Content {
-			result = append(result, n.Value)
+		for _, node := range value.Content {
+			result = append(result, node.Value)
 		}
 		*c = result
 		return nil
 	default:
-		return fmt.Errorf("command must be string or list")
+		return fmt.Errorf("command must be a string or a list of strings")
 	}
 }
 
@@ -69,6 +69,7 @@ type ExitCodeExpect struct {
 	RawInt *int   `json:"raw,omitempty"` // preserve original int for reporting/compatibility
 }
 
+// String returns a string representation of the exit code expectation.
 func (e ExitCodeExpect) String() string {
 	return fmt.Sprintf("%s%d", e.Op, e.Value)
 }
@@ -93,12 +94,26 @@ func (e ExitCodeExpect) SatisfiedBy(actual int) bool {
 	}
 }
 
+// parseOperator extracts the comparison operator from an expression.
+// Returns the operator and the remaining string after the operator.
+func parseOperator(expr string) (string, string) {
+	operators := []string{"==", "!=", ">=", "<=", ">", "<"}
+	for _, op := range operators {
+		if strings.HasPrefix(expr, op) {
+			rest := strings.TrimSpace(expr[len(op):])
+			return op, rest
+		}
+	}
+	return "==", expr
+}
+
 // UnmarshalYAML accepts an int or a comparison expression string (==, !=, >=, <=, >, <).
 func (e *ExitCodeExpect) UnmarshalYAML(value *yaml.Node) error {
 	if value.Kind != yaml.ScalarNode {
-		return fmt.Errorf("exit_code must be an int or comparison expression")
+		return fmt.Errorf("exit_code must be an integer or a comparison expression")
 	}
 
+	// Try parsing as a plain integer
 	if v, err := strconv.Atoi(value.Value); err == nil {
 		e.Op = "=="
 		e.Value = v
@@ -106,16 +121,9 @@ func (e *ExitCodeExpect) UnmarshalYAML(value *yaml.Node) error {
 		return nil
 	}
 
+	// Parse as a comparison expression
 	expr := strings.TrimSpace(value.Value)
-	op := "=="
-	rest := expr
-	for _, candidate := range []string{"==", "!=", ">=", "<=", ">", "<"} {
-		if strings.HasPrefix(expr, candidate) {
-			op = candidate
-			rest = strings.TrimSpace(expr[len(candidate):])
-			break
-		}
-	}
+	op, rest := parseOperator(expr)
 
 	v, err := strconv.Atoi(rest)
 	if err != nil {
@@ -147,24 +155,24 @@ type TestList []TestCase
 // UnmarshalYAML supports a root sequence or {tests: []}.
 func (tl *TestList) UnmarshalYAML(value *yaml.Node) error {
 	if value.Kind == yaml.SequenceNode {
-		var tests []TestCase
-		if err := value.Decode(&tests); err != nil {
+		result := make([]TestCase, 0, len(value.Content))
+		if err := value.Decode(&result); err != nil {
 			return err
 		}
-		*tl = tests
+		*tl = result
 		return nil
 	}
 	if value.Kind == yaml.MappingNode {
-		var container struct {
+		var wrapper struct {
 			Tests []TestCase `yaml:"tests"`
 		}
-		if err := value.Decode(&container); err != nil {
+		if err := value.Decode(&wrapper); err != nil {
 			return err
 		}
-		*tl = container.Tests
+		*tl = wrapper.Tests
 		return nil
 	}
-	return fmt.Errorf("config must be a list or contain a 'tests' list")
+	return fmt.Errorf("config must be a list of tests or a map containing a 'tests' key")
 }
 
 // LoadTests reads and parses the YAML test definitions.

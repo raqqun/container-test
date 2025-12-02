@@ -33,7 +33,10 @@ jobs:
       #   run: go test -v ./...
 
       - name: Build
-        run: go build -ldflags "-X container-test-cli/internal/version.Version=${{ env.release_version }}-$GIT_SHORT_SHA" ./...
+        run: |
+          go build \
+          -ldflags "-X container-test-cli/internal/version.Version=${{ env.release_version }}-$GIT_SHORT_SHA" \
+          -o container-test-cli ./cmd/container-test-cli/main.go
 
       - name: Create Release Binary
         id: create_release_binary

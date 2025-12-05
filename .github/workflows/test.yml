@@ -22,9 +22,6 @@ jobs:
 
       - uses: actions/checkout@v2
 
-      - name: Set up Docker
-        uses: docker/setup-docker-action@v4
-
       - name: Test container-test
         run: |
           go run ./... -config tests.example.yaml -image curlimages/curl:latest -debug

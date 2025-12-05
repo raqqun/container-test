@@ -25,7 +25,7 @@ builds:
       - arm64
     main: ./cmd/container-test-cli/main.go
     ldflags:
-      - -s -w -X container-test-cli/internal/version.Version={{.Version}}
+      - -s -w -X container-test-cli/internal/version.Version={{.Version}}-{{ .ShortCommit }}
 
 archives:
   - formats: [tar.gz]
@@ -50,8 +50,7 @@ changelog:
       - "^test:"
 
 release:
-  draft: true
-  replace_existing_draft: true
+  prerelease: true
   footer: >-
 
     ---

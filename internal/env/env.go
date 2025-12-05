@@ -31,8 +31,8 @@ func EnvBool(key string, fallback bool) bool {
 	return fallback
 }
 
-// GetenvDefault returns the environment value or a fallback when unset.
-func GetenvDefault(key, fallback string) string {
+// EnvDefault returns the environment value or a fallback when unset.
+func EnvDefault(key, fallback string) string {
 	if val, ok := os.LookupEnv(key); ok {
 		return val
 	}

@@ -32,7 +32,7 @@ func parseFlags() *cliConfig {
 
 	flag.StringVar(&cfg.configPath, "config", os.Getenv("CONTAINER_TEST_CONFIG"), "Path to YAML file describing tests")
 	flag.StringVar(&cfg.image, "image", os.Getenv("CONTAINER_TEST_IMAGE"), "Image reference to run")
-	flag.StringVar(&cfg.engine, "engine", env.GetenvDefault("CONTAINER_TEST_ENGINE", "docker"), "Container engine CLI to use (docker, podman, ...)")
+	flag.StringVar(&cfg.engine, "engine", env.EnvDefault("CONTAINER_TEST_ENGINE", "docker"), "Container engine CLI to use (docker, podman, ...)")
 	flag.IntVar(&cfg.defaultTimeout, "default-timeout", env.EnvInt("CONTAINER_TEST_DEFAULT_TIMEOUT", 30), "Default timeout (seconds) for each test when not specified")
 	flag.StringVar(&cfg.jsonReport, "json-report", os.Getenv("CONTAINER_TEST_JSON_REPORT"), "Write a JSON report to the given path")
 	flag.BoolVar(&cfg.failFast, "fail-fast", env.EnvBool("CONTAINER_TEST_FAIL_FAST", false), "Stop on first failure")
@@ -56,16 +56,16 @@ func parseFlags() *cliConfig {
 	return cfg
 }
 
-// getTestName returns the test name or generates a default one.
-func getTestName(testCase config.TestCase, index int) string {
+// testName returns the test name or generates a default one.
+func testName(testCase config.TestCase, index int) string {
 	if testCase.Name != "" {
 		return testCase.Name
 	}
 	return fmt.Sprintf("test-%d", index+1)
 }
 
-// getCommand resolves the command from either Exec or Command field.
-func getCommand(testCase config.TestCase) []string {
+// command resolves the command from either Exec or Command field.
+func command(testCase config.TestCase) []string {
 	if len(testCase.Exec) > 0 {
 		return testCase.Exec
 	}
@@ -74,7 +74,7 @@ func getCommand(testCase config.TestCase) []string {
 
 // handleDryRun prints the command that would be executed without running it.
 func handleDryRun(engine, image string, testCase config.TestCase, name string) runner.Result {
-	command := getCommand(testCase)
+	command := command(testCase)
 	runCmd := runner.BuildRunCommand(engine, image, command, testCase.Workdir, testCase.Env, testCase.RunArgs, testCase.Entrypoint)
 	fmt.Printf("   [dry-run] %s\n", strings.Join(runCmd, " "))
 	return runner.Result{
@@ -99,7 +99,7 @@ func runTests(cfg *cliConfig, tests []config.TestCase) ([]runner.Result, int) {
 	failures := 0
 
 	for idx, testCase := range tests {
-		name := getTestName(testCase, idx)
+		name := testName(testCase, idx)
 		fmt.Printf("==> %s\n", name)
 
 		var res runner.Result

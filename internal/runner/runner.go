@@ -15,12 +15,13 @@ import (
 
 // Result captures the outcome of running a single test.
 type Result struct {
-	Status   string   `json:"status"`
-	Name     string   `json:"name"`
-	Stdout   string   `json:"stdout"`
-	Stderr   string   `json:"stderr"`
-	ExitCode *int     `json:"exit_code"`
-	Failures []string `json:"failures,omitempty"`
+	Status        string   `json:"status"`
+	Name          string   `json:"name"`
+	Stdout        string   `json:"stdout"`
+	Stderr        string   `json:"stderr"`
+	ExitCode      *int     `json:"exit_code"`
+	Failures      []string `json:"failures,omitempty"`
+	DebugMessages []string `json:"debug_messages,omitempty"`
 }
 
 // Config holds configuration for running all tests.
@@ -127,6 +128,7 @@ func runSingleTest(testCase config.TestCase, engine, image string, defaultTimeou
 		return Result{Status: "SKIPPED", Name: firstNonEmpty(testCase.Name, "unnamed")}
 	}
 
+	debugMessages := []string{}
 	command := testCase.Exec
 	if len(command) == 0 {
 		command = testCase.Command
@@ -154,15 +156,11 @@ func runSingleTest(testCase config.TestCase, engine, image string, defaultTimeou
 
 	// Handle dry-run mode
 	if dryRun {
-		fmt.Printf("[dry-run] %s\n", strings.Join(runCmd, " "))
 		return Result{
-			Status: "DRY-RUN",
-			Name:   firstNonEmpty(testCase.Name, "unnamed"),
+			Status:        "DRY-RUN",
+			Name:          firstNonEmpty(testCase.Name, "unnamed"),
+			DebugMessages: []string{fmt.Sprintf("dry-run command: %s (timeout=%ds)", strings.Join(runCmd, " "), timeout)},
 		}
-	}
-
-	if debug {
-		fmt.Printf("[debug] running: %s (timeout=%ds)\n", strings.Join(runCmd, " "), timeout)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Second)
@@ -180,12 +178,13 @@ func runSingleTest(testCase config.TestCase, engine, image string, defaultTimeou
 	if err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
 			return Result{
-				Status:   "FAILED",
-				Name:     firstNonEmpty(testCase.Name, "unnamed"),
-				Stdout:   stdout,
-				Stderr:   stderr,
-				ExitCode: nil,
-				Failures: []string{fmt.Sprintf("timed out after %ds", timeout)},
+				Status:        "FAILED",
+				Name:          firstNonEmpty(testCase.Name, "unnamed"),
+				Stdout:        stdout,
+				Stderr:        stderr,
+				ExitCode:      nil,
+				Failures:      []string{fmt.Sprintf("timed out after %ds", timeout)},
+				DebugMessages: debugMessages,
 			}
 		}
 		var exitErr *exec.ExitError
@@ -193,12 +192,13 @@ func runSingleTest(testCase config.TestCase, engine, image string, defaultTimeou
 			exitCode = exitErr.ExitCode()
 		} else {
 			return Result{
-				Status:   "FAILED",
-				Name:     firstNonEmpty(testCase.Name, "unnamed"),
-				Stdout:   stdout,
-				Stderr:   stderr,
-				ExitCode: nil,
-				Failures: []string{fmt.Sprintf("exception: %v", err)},
+				Status:        "FAILED",
+				Name:          firstNonEmpty(testCase.Name, "unnamed"),
+				Stdout:        stdout,
+				Stderr:        stderr,
+				ExitCode:      nil,
+				Failures:      []string{fmt.Sprintf("exception: %v", err)},
+				DebugMessages: debugMessages,
 			}
 		}
 	}
@@ -209,25 +209,31 @@ func runSingleTest(testCase config.TestCase, engine, image string, defaultTimeou
 		status = "FAILED"
 	}
 
+	if debug {
+		debugMessages = append(debugMessages, fmt.Sprintf("full command: %s (timeout=%ds)", strings.Join(runCmd, " "), timeout))
+		debugMessages = append(debugMessages, fmt.Sprintf("stdout: %q", stdout))
+		debugMessages = append(debugMessages, fmt.Sprintf("stderr: %q", stderr))
+		debugMessages = append(debugMessages, fmt.Sprintf("exit code: %d", exitCode))
+	}
+
 	return Result{
-		Status:   status,
-		Name:     firstNonEmpty(testCase.Name, "unnamed"),
-		Stdout:   stdout,
-		Stderr:   stderr,
-		ExitCode: &exitCode,
-		Failures: failures,
+		Status:        status,
+		Name:          firstNonEmpty(testCase.Name, "unnamed"),
+		Stdout:        stdout,
+		Stderr:        stderr,
+		ExitCode:      &exitCode,
+		Failures:      failures,
+		DebugMessages: debugMessages,
 	}
 }
 
 // RunTests executes all test cases sequentially, respecting fail-fast behavior.
 // Returns a slice of test results and the total number of failed tests.
-func RunTests(tests []config.TestCase, cfg Config) ([]Result, int) {
+func RunTests(tests []config.TestCase, cfg Config, onResult func(Result)) ([]Result, int) {
 	results := make([]Result, 0, len(tests))
 	failures := 0
 
-	for idx, testCase := range tests {
-		name := testCase.ResolveName(idx)
-		fmt.Printf("==> %s\n", name)
+	for _, testCase := range tests {
 
 		res := runSingleTest(testCase, cfg.Engine, cfg.Image, cfg.DefaultTimeout, cfg.Debug, cfg.DryRun)
 
@@ -235,6 +241,7 @@ func RunTests(tests []config.TestCase, cfg Config) ([]Result, int) {
 			failures++
 		}
 
+		onResult(res)
 		results = append(results, res)
 
 		if cfg.FailFast && failures > 0 {

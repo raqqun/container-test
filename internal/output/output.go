@@ -40,15 +40,25 @@ func WriteReport(path string, results []runner.Result) error {
 }
 
 // PrintResult displays the test result status with color formatting.
-func PrintResult(res runner.Result, enableColor bool) {
-	statusColored := Colorize(res.Status, res.Status, enableColor)
+func PrintResult(res runner.Result) {
+	statusColored := Colorize(res.Status, res.Status, shouldUseColor())
+	name := res.Name
+	fmt.Printf("==> %s\n", name)
+
 	fmt.Printf("   %s\n", statusColored)
+
+	for _, msg := range res.DebugMessages {
+		fmt.Printf("     [debug] %s\n", msg)
+	}
+
 	for _, failure := range res.Failures {
 		fmt.Printf("     - %s\n", failure)
 	}
+
+	fmt.Println()
 }
 
-// ShouldUseColor returns true if color output should be enabled.
-func ShouldUseColor() bool {
+// shouldUseColor returns true if color output should be enabled.
+func shouldUseColor() bool {
 	return os.Getenv("NO_COLOR") == ""
 }

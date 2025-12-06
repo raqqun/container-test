@@ -22,22 +22,19 @@ func main() {
 		os.Exit(2)
 	}
 
-	results, failures := runner.RunTests(tests, runner.Config{
-		Engine:         cfg.Engine,
-		Image:          cfg.Image,
-		DefaultTimeout: cfg.DefaultTimeout,
-		FailFast:       cfg.FailFast,
-		Debug:          cfg.Debug,
-		DryRun:         cfg.DryRun,
-	})
-
-	// Print results
-	if !cfg.DryRun {
-		enableColor := output.ShouldUseColor()
-		for _, res := range results {
-			output.PrintResult(res, enableColor)
-		}
-	}
+	results, failures := runner.RunTests(
+		tests,
+		runner.Config{
+			Engine:         cfg.Engine,
+			Image:          cfg.Image,
+			DefaultTimeout: cfg.DefaultTimeout,
+			FailFast:       cfg.FailFast,
+			Debug:          cfg.Debug,
+			DryRun:         cfg.DryRun,
+		},
+		func(result runner.Result) {
+			output.PrintResult(result)
+		})
 
 	if cfg.JsonReport != "" {
 		if err := output.WriteReport(cfg.JsonReport, results); err != nil {

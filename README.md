@@ -1,5 +1,11 @@
 # container-test-cli
 
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=raqqun_container-test&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=raqqun_container-test)
+[![Reliability Rating](https://sonarcloud.io/api/project_badges/measure?project=raqqun_container-test&metric=reliability_rating)](https://sonarcloud.io/summary/new_code?id=raqqun_container-test)
+[![Maintainability Rating](https://sonarcloud.io/api/project_badges/measure?project=raqqun_container-test&metric=sqale_rating)](https://sonarcloud.io/summary/new_code?id=raqqun_container-test)
+[![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=raqqun_container-test&metric=security_rating)](https://sonarcloud.io/summary/new_code?id=raqqun_container-test)
+
+
 Run declarative smoke tests against container images. The CLI reads a YAML file of commands to execute inside a container, asserts exit codes and output, and optionally emits a JSON report.
 
 ## Features

@@ -10,37 +10,6 @@ import (
 	"container-test-cli/internal/runner"
 )
 
-// runTests executes all test cases sequentially, respecting fail-fast behavior.
-// Returns a slice of test results and the total number of failed tests.
-func runTests(cfg *cli.CliConfig, tests []config.TestCase) ([]runner.Result, int) {
-	enableColor := output.ShouldUseColor()
-	results := make([]runner.Result, 0, len(tests))
-	failures := 0
-
-	for idx, testCase := range tests {
-		name := testCase.ResolveName(idx)
-		fmt.Printf("==> %s\n", name)
-
-		res := runner.RunSingleTest(testCase, cfg.Engine, cfg.Image, cfg.DefaultTimeout, cfg.Debug, cfg.DryRun)
-
-		if !cfg.DryRun {
-			output.PrintResult(res, enableColor)
-			if len(res.Failures) > 0 {
-				failures++
-			}
-		}
-
-		results = append(results, res)
-
-		if cfg.FailFast && failures > 0 {
-			fmt.Println("Stopping due to fail-fast")
-			break
-		}
-	}
-
-	return results, failures
-}
-
 // main is the entry point for the container test CLI. It parses command-line flags,
 // loads test definitions, executes all tests, optionally writes a JSON report,
 // and exits with an appropriate status code.
@@ -53,7 +22,22 @@ func main() {
 		os.Exit(2)
 	}
 
-	results, failures := runTests(cfg, tests)
+	results, failures := runner.RunTests(tests, runner.Config{
+		Engine:         cfg.Engine,
+		Image:          cfg.Image,
+		DefaultTimeout: cfg.DefaultTimeout,
+		FailFast:       cfg.FailFast,
+		Debug:          cfg.Debug,
+		DryRun:         cfg.DryRun,
+	})
+
+	// Print results
+	if !cfg.DryRun {
+		enableColor := output.ShouldUseColor()
+		for _, res := range results {
+			output.PrintResult(res, enableColor)
+		}
+	}
 
 	if cfg.JsonReport != "" {
 		if err := output.WriteReport(cfg.JsonReport, results); err != nil {

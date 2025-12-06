@@ -23,6 +23,16 @@ type Result struct {
 	Failures []string `json:"failures,omitempty"`
 }
 
+// Config holds configuration for running all tests.
+type Config struct {
+	Engine         string
+	Image          string
+	DefaultTimeout int
+	FailFast       bool
+	Debug          bool
+	DryRun         bool
+}
+
 // firstNonEmpty returns the first non-empty string.
 func firstNonEmpty(values ...string) string {
 	for _, v := range values {
@@ -110,9 +120,9 @@ func evalExpectations(expect config.ExpectBlock, stdout, stderr string, exitCode
 	return failures
 }
 
-// RunSingleTest executes a single container run and evaluates expectations.
+// runSingleTest executes a single container run and evaluates expectations.
 // If dryRun is true, it prints the command without executing it.
-func RunSingleTest(testCase config.TestCase, engine, image string, defaultTimeout int, debug, dryRun bool) Result {
+func runSingleTest(testCase config.TestCase, engine, image string, defaultTimeout int, debug, dryRun bool) Result {
 	if testCase.Skip {
 		return Result{Status: "SKIPPED", Name: firstNonEmpty(testCase.Name, "unnamed")}
 	}
@@ -207,4 +217,31 @@ func RunSingleTest(testCase config.TestCase, engine, image string, defaultTimeou
 		ExitCode: &exitCode,
 		Failures: failures,
 	}
+}
+
+// RunTests executes all test cases sequentially, respecting fail-fast behavior.
+// Returns a slice of test results and the total number of failed tests.
+func RunTests(tests []config.TestCase, cfg Config) ([]Result, int) {
+	results := make([]Result, 0, len(tests))
+	failures := 0
+
+	for idx, testCase := range tests {
+		name := testCase.ResolveName(idx)
+		fmt.Printf("==> %s\n", name)
+
+		res := runSingleTest(testCase, cfg.Engine, cfg.Image, cfg.DefaultTimeout, cfg.Debug, cfg.DryRun)
+
+		if len(res.Failures) > 0 {
+			failures++
+		}
+
+		results = append(results, res)
+
+		if cfg.FailFast && failures > 0 {
+			fmt.Println("Stopping due to fail-fast")
+			break
+		}
+	}
+
+	return results, failures
 }

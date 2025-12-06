@@ -2,6 +2,7 @@ package output
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 
 	"container-test-cli/internal/runner"
@@ -36,4 +37,18 @@ func WriteReport(path string, results []runner.Result) error {
 		return err
 	}
 	return os.WriteFile(path, data, 0o644)
+}
+
+// PrintResult displays the test result status with color formatting.
+func PrintResult(res runner.Result, enableColor bool) {
+	statusColored := Colorize(res.Status, res.Status, enableColor)
+	fmt.Printf("   %s\n", statusColored)
+	for _, failure := range res.Failures {
+		fmt.Printf("     - %s\n", failure)
+	}
+}
+
+// ShouldUseColor returns true if color output should be enabled.
+func ShouldUseColor() bool {
+	return os.Getenv("NO_COLOR") == ""
 }

@@ -111,7 +111,8 @@ func evalExpectations(expect config.ExpectBlock, stdout, stderr string, exitCode
 }
 
 // RunSingleTest executes a single container run and evaluates expectations.
-func RunSingleTest(engine, image string, testCase config.TestCase, defaultTimeout int, debug bool) Result {
+// If dryRun is true, it prints the command without executing it.
+func RunSingleTest(testCase config.TestCase, engine, image string, defaultTimeout int, debug, dryRun bool) Result {
 	if testCase.Skip {
 		return Result{Status: "SKIPPED", Name: firstNonEmpty(testCase.Name, "unnamed")}
 	}
@@ -138,13 +139,24 @@ func RunSingleTest(engine, image string, testCase config.TestCase, defaultTimeou
 	if testCase.Timeout != nil {
 		timeout = *testCase.Timeout
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Second)
-	defer cancel()
 
 	runCmd := BuildRunCommand(engine, image, command, testCase.Workdir, testCase.Env, runArgs, entrypoint)
+
+	// Handle dry-run mode
+	if dryRun {
+		fmt.Printf("[dry-run] %s\n", strings.Join(runCmd, " "))
+		return Result{
+			Status: "DRY-RUN",
+			Name:   firstNonEmpty(testCase.Name, "unnamed"),
+		}
+	}
+
 	if debug {
 		fmt.Printf("[debug] running: %s (timeout=%ds)\n", strings.Join(runCmd, " "), timeout)
 	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Second)
+	defer cancel()
 	cmd := exec.CommandContext(ctx, runCmd[0], runCmd[1:]...)
 	var stdoutBuf, stderrBuf bytes.Buffer
 	cmd.Stdout = &stdoutBuf

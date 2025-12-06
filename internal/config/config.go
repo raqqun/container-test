@@ -175,6 +175,15 @@ func (tl *TestList) UnmarshalYAML(value *yaml.Node) error {
 	return fmt.Errorf("config must be a list of tests or a map containing a 'tests' key")
 }
 
+// ResolveName returns the test's configured name, or generates a default name
+// based on the test index if no name is specified.
+func (tc TestCase) ResolveName(index int) string {
+	if tc.Name != "" {
+		return tc.Name
+	}
+	return fmt.Sprintf("test-%d", index+1)
+}
+
 // LoadTests reads and parses the YAML test definitions.
 func LoadTests(path string) (TestList, error) {
 	data, err := os.ReadFile(path)

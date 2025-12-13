@@ -1,4 +1,4 @@
-# container-test-cli
+# container-test
 
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=raqqun_container-test&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=raqqun_container-test)
 [![Reliability Rating](https://sonarcloud.io/api/project_badges/measure?project=raqqun_container-test&metric=reliability_rating)](https://sonarcloud.io/summary/new_code?id=raqqun_container-test)
@@ -8,6 +8,12 @@
 
 
 Run declarative smoke tests against container images. The CLI reads a YAML file of commands to execute inside a container, asserts exit codes and output, and optionally emits a JSON report.
+
+The tool is useful for validating container images in CI pipelines, ensuring that expected functionality is present and working as intended.
+
+The primary usage pattern is to integrate `container-test` into your CI workflow. Thus, `container-test` is designed to be simple to install and run in automated environments. The binary has no runtime dependencies beyond a container engine CLI (e.g., `docker` or `podman`). It was developed with simplicity in mind and has no external dependencies beyond the Go standard library. The binary itself weighs 2.7MB.
+
+It suports any container engine CLI that follows the standard `docker run` semantics, such as `podman` or `nerdctl`.
 
 ## Features
 - Uses any container engine CLI (`docker`, `podman`, etc.) with per-test `run_args` and optional entrypoint override.
@@ -21,15 +27,21 @@ Run declarative smoke tests against container images. The CLI reads a YAML file 
 - Container engine CLI available on the host (default: `docker`; override via `-engine` or `CONTAINER_TEST_ENGINE`).
 - Go 1.22+ to build from source.
 
-## Build
-```sh
-go build -o container-test-cli ./cmd/container-test-cli
-```
 
 ## Usage
 ```sh
-./container-test-cli -config tests.example.yaml -image curlimages/curl:latest
+./container-test -config tests.example.yaml -image curlimages/curl:latest
 ```
+
+## Installation
+
+```shell
+curl -L https://github.com/raqqun/container-test/releases/download/v1.5.1/container-test_Linux_x86_64.tar.gz \
+-o /tmp/container-test_Linux_x86_64.tar.gz
+
+sudo tar -xzf /tmp/container-test_Linux_x86_64.tar.gz -C /usr/local/bin container-test
+```
+
 
 ### Flags and env vars
 All flags have environment variable counterparts except `-version`:

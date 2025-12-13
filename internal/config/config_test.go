@@ -324,9 +324,9 @@ func TestExitCodeExpect_String(t *testing.T) {
 // TestParseOperator tests operator parsing.
 func TestParseOperator(t *testing.T) {
 	tests := []struct {
-		name    string
-		expr    string
-		wantOp  string
+		name     string
+		expr     string
+		wantOp   string
 		wantRest string
 	}{
 		{"equals", "==5", "==", "5"},
@@ -341,7 +341,7 @@ func TestParseOperator(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			op, rest := parseOperator(tt.expr)
+			op, rest := ExitCodeExpect{}.parseOperator(tt.expr)
 			if op != tt.wantOp {
 				t.Errorf("Expected operator '%s', got '%s'", tt.wantOp, op)
 			}

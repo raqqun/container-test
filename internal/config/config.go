@@ -96,7 +96,7 @@ func (e ExitCodeExpect) SatisfiedBy(actual int) bool {
 
 // parseOperator extracts the comparison operator from an expression.
 // Returns the operator and the remaining string after the operator.
-func parseOperator(expr string) (string, string) {
+func (e ExitCodeExpect) parseOperator(expr string) (string, string) {
 	operators := []string{"==", "!=", ">=", "<=", ">", "<"}
 	for _, op := range operators {
 		if strings.HasPrefix(expr, op) {
@@ -123,7 +123,7 @@ func (e *ExitCodeExpect) UnmarshalYAML(value *yaml.Node) error {
 
 	// Parse as a comparison expression
 	expr := strings.TrimSpace(value.Value)
-	op, rest := parseOperator(expr)
+	op, rest := e.parseOperator(expr)
 
 	v, err := strconv.Atoi(rest)
 	if err != nil {

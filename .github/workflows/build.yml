@@ -27,8 +27,13 @@ jobs:
         with:
           go-version: stable
 
-      # - name: Run Tests
-      #   run: go test -v ./...
+      - name: Test container-test
+        run: |
+          go test -v -cover -coverprofile=coverage.out ./...
+
+      - name: Test container-test with example container tests
+        run: |
+          go run ./... -config tests.example.yaml -image curlimages/curl:latest -debug
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6

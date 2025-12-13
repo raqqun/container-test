@@ -50,7 +50,6 @@ changelog:
       - "^test:"
 
 release:
-  prerelease: true
   footer: >-
 
     ---

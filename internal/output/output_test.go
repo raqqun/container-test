@@ -569,9 +569,9 @@ func TestWriteReport_FilePermissions(t *testing.T) {
 		t.Fatalf("Failed to stat file: %v", err)
 	}
 
-	// Check file permissions (0644)
+	// Check file permissions (0600)
 	mode := info.Mode().Perm()
-	expected := os.FileMode(0644)
+	expected := os.FileMode(0600)
 	if mode != expected {
 		t.Errorf("Expected file permissions %o, got %o", expected, mode)
 	}

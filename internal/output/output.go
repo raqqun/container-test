@@ -36,7 +36,7 @@ func WriteReport(path string, results []runner.Result) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0o644)
+	return os.WriteFile(path, data, 0o600)
 }
 
 // PrintResult displays the test result status with color formatting.

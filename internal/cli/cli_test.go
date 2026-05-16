@@ -17,12 +17,12 @@ func TestParseFlags_Success(t *testing.T) {
 	// Reset flag.CommandLine for clean test state
 	flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 
-	os.Args = []string{"cmd", "-config", "tests.yaml", "-image", "alpine:latest"}
+	os.Args = []string{"cmd", "-config", "../../tests.example.yaml", "-image", "alpine:latest"}
 
 	cfg := ParseFlags()
 
-	if cfg.ConfigPath != "tests.yaml" {
-		t.Errorf("Expected ConfigPath 'tests.yaml', got '%s'", cfg.ConfigPath)
+	if cfg.ConfigPath != "../../tests.example.yaml" {
+		t.Errorf("Expected ConfigPath '../../tests.example.yaml', got '%s'", cfg.ConfigPath)
 	}
 	if cfg.Image != "alpine:latest" {
 		t.Errorf("Expected Image 'alpine:latest', got '%s'", cfg.Image)
@@ -101,8 +101,8 @@ func TestParseFlags_EnvironmentVariables(t *testing.T) {
 		"CONTAINER_TEST_DEFAULT_TIMEOUT": "45",
 		"CONTAINER_TEST_JSON_REPORT":     "env-report.json",
 		"CONTAINER_TEST_FAIL_FAST":       "true",
-		"CONTAINER_TEST_DEBUG":            "1",
-		"CONTAINER_TEST_DRY_RUN":          "yes",
+		"CONTAINER_TEST_DEBUG":           "1",
+		"CONTAINER_TEST_DRY_RUN":         "yes",
 	}
 
 	// Set environment variables

@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -186,6 +187,12 @@ func (tc TestCase) ResolveName(index int) string {
 
 // LoadTests reads and parses the YAML test definitions.
 func LoadTests(path string) (TestList, error) {
+	cleanPath := filepath.Clean(path)
+	if _, err := os.Stat(cleanPath); os.IsNotExist(err) {
+		return nil, fmt.Errorf("config file does not exist: %s", cleanPath)
+	}
+
+	path = cleanPath
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err

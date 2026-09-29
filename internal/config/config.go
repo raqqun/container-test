@@ -153,7 +153,10 @@ type TestCase struct {
 // TestList holds all parsed test cases.
 type TestList []TestCase
 
-// UnmarshalYAML supports a root sequence or {tests: []}.
+// UnmarshalYAML supports a root sequence or a map containing a 'tests' key.
+// Any other mapping shape (e.g. a typo such as 'test:' or 'Tests:') is rejected
+// instead of silently yielding zero tests, which would report success without
+// running any test.
 func (tl *TestList) UnmarshalYAML(value *yaml.Node) error {
 	if value.Kind == yaml.SequenceNode {
 		result := make([]TestCase, 0, len(value.Content))
@@ -164,11 +167,25 @@ func (tl *TestList) UnmarshalYAML(value *yaml.Node) error {
 		return nil
 	}
 	if value.Kind == yaml.MappingNode {
+		// Only treat mappings that actually key on 'tests' as the wrapped form.
+		// Mappings without it fall through to the error below.
+		hasTestsKey := false
+		for i := 0; i+1 < len(value.Content); i += 2 {
+			if value.Content[i].Value == "tests" {
+				hasTestsKey = true
+				break
+			}
+		}
+		if !hasTestsKey {
+			return fmt.Errorf("config must be a list of tests or a map containing a 'tests' key")
+		}
+
 		var wrapper struct {
 			Tests []TestCase `yaml:"tests"`
 		}
+		// Wrong-shaped values, e.g. `tests: not-a-list`, are rejected here.
 		if err := value.Decode(&wrapper); err != nil {
-			return err
+			return fmt.Errorf("invalid 'tests' key: %w", err)
 		}
 		*tl = wrapper.Tests
 		return nil
@@ -197,9 +214,19 @@ func LoadTests(path string) (TestList, error) {
 	if err != nil {
 		return nil, err
 	}
+	// An empty (or whitespace-only) file yields no tests and would otherwise be
+	// reported as a passing run; treat it as a configuration error.
+	if len(strings.TrimSpace(string(data))) == 0 {
+		return nil, fmt.Errorf("config file is empty: %s", path)
+	}
 	var tests TestList
 	if err := yaml.Unmarshal(data, &tests); err != nil {
 		return nil, err
+	}
+	// Fail closed: a parsed config with zero tests would produce a green
+	// "All tests passed" run without executing any assertion.
+	if len(tests) == 0 {
+		return nil, fmt.Errorf("config contains no tests: %s", path)
 	}
 	return tests, nil
 }

@@ -504,6 +504,87 @@ func TestLoadTests_InvalidYAML(t *testing.T) {
 	}
 }
 
+// TestLoadTests_InvalidRegexes tests that invalid regex patterns are rejected
+// at load time with the offending test name and field (V-02).
+func TestLoadTests_InvalidRegexes(t *testing.T) {
+	tests := []struct {
+		name     string
+		content  string
+		errParts []string
+	}{
+		{
+			name: "stdout_regex",
+			content: `tests:
+  - name: bad-regex
+    command: "echo hi"
+    expect:
+      stdout_regex: "("`,
+			errParts: []string{`test "bad-regex"`, `stdout_regex`, `invalid`},
+		},
+		{
+			name: "stderr_regex",
+			content: `tests:
+  - name: bad-stderr
+    command: "echo hi"
+    expect:
+      stderr_regex: "["`,
+			errParts: []string{`test "bad-stderr"`, `stderr_regex`, `invalid`},
+		},
+		{
+			name: "default_name",
+			content: `tests:
+  - exec: ["echo"]
+    expect:
+      stdout_regex: "("`,
+			errParts: []string{`test "test-1"`},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			tmpFile := filepath.Join(tmpDir, "badregex.yaml")
+			if err := os.WriteFile(tmpFile, []byte(tt.content), 0644); err != nil {
+				t.Fatalf("Failed to write temp file: %v", err)
+			}
+
+			tests, err := LoadTests(tmpFile)
+			if err == nil {
+				t.Fatalf("Expected error for invalid regex, got tests: %v", tests)
+			}
+			for _, part := range tt.errParts {
+				if !strings.Contains(err.Error(), part) {
+					t.Errorf("Expected error to contain %q, got: %v", part, err)
+				}
+			}
+		})
+	}
+}
+
+// TestLoadTests_ValidRegexesAccepted tests that valid regex patterns load fine.
+func TestLoadTests_ValidRegexesAccepted(t *testing.T) {
+	content := `tests:
+  - name: ok
+    exec: ["echo", "hello"]
+    expect:
+      stdout_regex: "^curl ?[0-9]+\\.[0-9]+\\.[0-9]+"
+      stderr_regex: ""`
+
+	tmpDir := t.TempDir()
+	tmpFile := filepath.Join(tmpDir, "okregex.yaml")
+	if err := os.WriteFile(tmpFile, []byte(content), 0644); err != nil {
+		t.Fatalf("Failed to write temp file: %v", err)
+	}
+
+	tests, err := LoadTests(tmpFile)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+	if len(tests) != 1 || tests[0].Name != "ok" {
+		t.Errorf("Expected 1 test named 'ok', got: %v", tests)
+	}
+}
+
 // TestTestCase_ComplexStructure tests unmarshaling a complete test case.
 func TestTestCase_ComplexStructure(t *testing.T) {
 	yamlData := `name: complex-test

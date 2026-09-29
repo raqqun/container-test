@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -201,5 +202,34 @@ func LoadTests(path string) (TestList, error) {
 	if err := yaml.Unmarshal(data, &tests); err != nil {
 		return nil, err
 	}
+	if err := validateRegexes(tests); err != nil {
+		return nil, err
+	}
 	return tests, nil
+}
+
+// regexFields maps expect fields holding regex patterns to their YAML names.
+var regexFields = []struct {
+	yamlName string
+	pattern  func(ExpectBlock) string
+}{
+	{"stdout_regex", func(e ExpectBlock) string { return e.StdoutRegex }},
+	{"stderr_regex", func(e ExpectBlock) string { return e.StderrRegex }},
+}
+
+// validateRegexes rejects invalid regex patterns at load time (with the test
+// name and field identified) instead of failing later during evaluation.
+func validateRegexes(tests TestList) error {
+	for i, tc := range tests {
+		for _, f := range regexFields {
+			pattern := f.pattern(tc.Expect)
+			if pattern == "" {
+				continue
+			}
+			if _, err := regexp.Compile(pattern); err != nil {
+				return fmt.Errorf("test %q: invalid %s %q: %w", tc.ResolveName(i), f.yamlName, pattern, err)
+			}
+		}
+	}
+	return nil
 }

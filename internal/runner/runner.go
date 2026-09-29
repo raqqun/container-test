@@ -85,11 +85,15 @@ func checkNotContains(output string, forbiddenStrings []string, outputName strin
 }
 
 // checkRegex verifies that output matches the given regex pattern.
+// Invalid patterns are reported as a test failure instead of panicking.
 func checkRegex(output, pattern, outputName string) []string {
 	if pattern == "" {
 		return nil
 	}
-	re := regexp.MustCompile(pattern)
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		return []string{fmt.Sprintf("%s invalid regex %q: %v", outputName, pattern, err)}
+	}
 	if !re.MatchString(output) {
 		return []string{fmt.Sprintf("%s does not match regex %q", outputName, pattern)}
 	}

@@ -405,16 +405,27 @@ func TestTestList_UnmarshalYAML_TestsKey(t *testing.T) {
 
 // TestTestList_UnmarshalYAML_Invalid tests unmarshaling invalid formats.
 func TestTestList_UnmarshalYAML_Invalid(t *testing.T) {
-	yamlData := `"just a string"`
-
-	var tests TestList
-	err := yaml.Unmarshal([]byte(yamlData), &tests)
-	if err == nil {
-		t.Fatal("Expected error for invalid format, got nil")
+	tests := []struct {
+		name     string
+		yamlData string
+		errMsg   string
+	}{
+		{"scalar", `"just a string"`, "must be a list of tests or a map containing a 'tests' key"},
+		{"mapping_without_tests_key", `name: x`, "must be a list of tests or a map containing a 'tests' key"},
+		{"tests_key_wrong_type", "tests: not-a-list", "invalid 'tests' key"},
 	}
 
-	if !strings.Contains(err.Error(), "must be a list of tests or a map containing a 'tests' key") {
-		t.Errorf("Expected error about format, got: %v", err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var tests TestList
+			err := yaml.Unmarshal([]byte(tt.yamlData), &tests)
+			if err == nil {
+				t.Fatal("Expected error for invalid format, got nil")
+			}
+			if !strings.Contains(err.Error(), tt.errMsg) {
+				t.Errorf("Expected error containing '%s', got: %v", tt.errMsg, err)
+			}
+		})
 	}
 }
 
@@ -635,16 +646,126 @@ func TestLoadTests_EmptyFile(t *testing.T) {
 		t.Fatalf("Failed to write temp file: %v", err)
 	}
 
-	tests, err := LoadTests(tmpFile)
-	// Empty file should not produce an error but return empty list or error depending on YAML parser
-	// In this case, it returns an error because the YAML is invalid (empty doc)
+	// An empty file must be rejected: it would otherwise be reported as a
+	// passing run without executing any test (fail-open).
+	_, err = LoadTests(tmpFile)
 	if err == nil {
-		// If no error, should be empty list
-		if len(tests) != 0 {
-			t.Errorf("Expected 0 tests for empty file, got %d", len(tests))
-		}
+		t.Fatal("Expected error for empty config file, got nil")
 	}
-	// Both behaviors (error or empty list) are acceptable for empty file
+	if !strings.Contains(err.Error(), "config file is empty") {
+		t.Errorf("Expected error about empty config file, got: %v", err)
+	}
+}
+
+// TestLoadTests_WhitespaceOnlyFile tests loading a whitespace-only file.
+func TestLoadTests_WhitespaceOnlyFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	tmpFile := filepath.Join(tmpDir, "whitespace.yaml")
+
+	if err := os.WriteFile(tmpFile, []byte("   \n\t\n"), 0644); err != nil {
+		t.Fatalf("Failed to write temp file: %v", err)
+	}
+
+	_, err := LoadTests(tmpFile)
+	if err == nil {
+		t.Fatal("Expected error for whitespace-only config file, got nil")
+	}
+	if !strings.Contains(err.Error(), "config file is empty") {
+		t.Errorf("Expected error about empty config file, got: %v", err)
+	}
+}
+
+// TestLoadTests_NoTestsKey tests that a mapping without a 'tests' key is rejected
+// instead of silently yielding zero tests (V-01 fail-open).
+func TestLoadTests_NoTestsKey(t *testing.T) {
+	content := `test:
+  - name: should-run
+    command: "echo hi"`
+
+	tmpDir := t.TempDir()
+	tmpFile := filepath.Join(tmpDir, "typo.yaml")
+	if err := os.WriteFile(tmpFile, []byte(content), 0644); err != nil {
+		t.Fatalf("Failed to write temp file: %v", err)
+	}
+
+	tests, err := LoadTests(tmpFile)
+	if err == nil {
+		t.Fatalf("Expected error for config without 'tests' key, got tests: %v", tests)
+	}
+	if !strings.Contains(err.Error(), "must be a list of tests or a map containing a 'tests' key") {
+		t.Errorf("Expected error about config format, got: %v", err)
+	}
+}
+
+// TestLoadTests_TestsKeyNullValue tests that a null 'tests' key is rejected.
+func TestLoadTests_TestsKeyNullValue(t *testing.T) {
+	tmpDir := t.TempDir()
+	tmpFile := filepath.Join(tmpDir, "null-tests.yaml")
+	if err := os.WriteFile(tmpFile, []byte("tests:\n"), 0644); err != nil {
+		t.Fatalf("Failed to write temp file: %v", err)
+	}
+
+	tests, err := LoadTests(tmpFile)
+	if err == nil {
+		t.Fatalf("Expected error for null 'tests' value, got tests: %v", tests)
+	}
+	if !strings.Contains(err.Error(), "config contains no tests") {
+		t.Errorf("Expected error about no tests, got: %v", err)
+	}
+}
+
+// TestLoadTests_EmptyTestsList tests that an explicitly empty tests list is rejected.
+func TestLoadTests_EmptyTestsList(t *testing.T) {
+	tmpDir := t.TempDir()
+	tmpFile := filepath.Join(tmpDir, "empty-tests.yaml")
+	if err := os.WriteFile(tmpFile, []byte("tests: []\n"), 0644); err != nil {
+		t.Fatalf("Failed to write temp file: %v", err)
+	}
+
+	tests, err := LoadTests(tmpFile)
+	if err == nil {
+		t.Fatalf("Expected error for empty tests list, got tests: %v", tests)
+	}
+	if !strings.Contains(err.Error(), "config contains no tests") {
+		t.Errorf("Expected error about no tests, got: %v", err)
+	}
+}
+
+// TestLoadTests_TestsKeyWrongType tests that a non-list 'tests' value is rejected.
+func TestLoadTests_TestsKeyWrongType(t *testing.T) {
+	tmpDir := t.TempDir()
+	tmpFile := filepath.Join(tmpDir, "badtype.yaml")
+	if err := os.WriteFile(tmpFile, []byte("tests: not-a-list\n"), 0644); err != nil {
+		t.Fatalf("Failed to write temp file: %v", err)
+	}
+
+	tests, err := LoadTests(tmpFile)
+	if err == nil {
+		t.Fatalf("Expected error for malformed 'tests' value, got tests: %v", tests)
+	}
+	if !strings.Contains(err.Error(), "invalid 'tests' key") {
+		t.Errorf("Expected error about invalid 'tests' key, got: %v", err)
+	}
+}
+
+// TestLoadTests_ListOfComponentFields tests that the full test-file schema is enforced.
+func TestLoadTests_ListOfFields(t *testing.T) {
+	content := `tests:
+  - name: x
+    command: "echo"
+    nosuchfield: 1
+`
+	tmpDir := t.TempDir()
+	tmpFile := filepath.Join(tmpDir, "strict.yaml")
+	if err := os.WriteFile(tmpFile, []byte(content), 0644); err != nil {
+		t.Fatalf("Failed to write temp file: %v", err)
+	}
+
+	tests, err := LoadTests(tmpFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = tests // accepted: per-test unknown fields stay tolerated
 }
 
 // TestLoadTests_WithTestsKeyEmpty tests loading a file with empty tests array.
@@ -659,12 +780,12 @@ func TestLoadTests_WithTestsKeyEmpty(t *testing.T) {
 		t.Fatalf("Failed to write temp file: %v", err)
 	}
 
+	// Zero tests would report "All tests passed" without running anything (V-01); fail closed.
 	tests, err := LoadTests(tmpFile)
-	if err != nil {
-		t.Fatalf("Unexpected error: %v", err)
+	if err == nil {
+		t.Fatalf("Expected error for empty tests array, got tests: %v", tests)
 	}
-
-	if len(tests) != 0 {
-		t.Errorf("Expected 0 tests, got %d", len(tests))
+	if !strings.Contains(err.Error(), "config contains no tests") {
+		t.Errorf("Expected error about no tests, got: %v", err)
 	}
 }

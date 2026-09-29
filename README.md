@@ -21,7 +21,7 @@ It suports any container engine CLI that follows the standard `docker run` seman
 - Per-test environment variables, working directory, and timeouts (with a global default).
 - `-fail-fast`, optional JSON report output, and colorized status (respecting `NO_COLOR`).
 - Dry-run and debug modes; `-version` for build info.
-- Accepts either a root list of tests or a `{tests: []}` object for YAML configs.
+- Accepts either a root list of tests or a `{tests: []}` object for YAML configs. A config that is empty or yields zero tests is rejected (exit code 2) so an empty suite can never be reported as a passing run.
 
 ## Requirements
 - Container engine CLI available on the host (default: `docker`; override via `-engine` or `CONTAINER_TEST_ENGINE`).

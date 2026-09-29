@@ -2,7 +2,6 @@ package runner
 
 import (
 	"container-test-cli/internal/config"
-	"fmt"
 	"strings"
 	"testing"
 )
@@ -772,27 +771,62 @@ func TestRunTests_OnResultCallback(t *testing.T) {
 	}
 }
 
-// TestCheckRegex_InvalidPattern tests handling of invalid regex patterns.
+// TestCheckRegex_InvalidPattern tests that an invalid regex is reported as a
+// failure instead of panicking (V-02).
 func TestCheckRegex_InvalidPattern(t *testing.T) {
 	defer func() {
 		if r := recover(); r != nil {
-			// If the function panics on invalid regex, that's acceptable
-			// The test passes
-			return
+			t.Errorf("checkRegex panicked on invalid pattern: %v", r)
 		}
 	}()
 
 	output := "test"
 	pattern := `[invalid(`
 
-	// This should either return a failure or panic
-	// Both behaviors are acceptable for invalid regex
 	failures := checkRegex(output, pattern, "stdout")
 
-	// If we reach here without panic, check that failures were reported
-	if len(failures) == 0 {
-		// The regex might be accepted by Go's regex engine, which is fine
-		fmt.Println("Invalid regex was accepted or handled gracefully")
+	if len(failures) != 1 {
+		t.Fatalf("Expected 1 failure for invalid regex, got %d: %v", len(failures), failures)
+	}
+	if !strings.Contains(failures[0], "invalid regex") {
+		t.Errorf("Expected failure to mention 'invalid regex', got: %v", failures)
+	}
+	if !strings.Contains(failures[0], pattern) {
+		t.Errorf("Expected failure to include the offending pattern, got: %v", failures)
+	}
+}
+
+// TestRunSingleTest_InvalidRegexNoPanic tests that a test case with an invalid
+// regex produces a FAILED result instead of crashing the process (V-02).
+func TestRunSingleTest_InvalidRegexNoPanic(t *testing.T) {
+	testCases := []struct {
+		name   string
+		expect config.ExpectBlock
+	}{
+		{"stdout_regex", config.ExpectBlock{StdoutRegex: "("}},
+		{"stderr_regex", config.ExpectBlock{StderrRegex: "["}},
+	}
+
+	for _, tt := range testCases {
+		t.Run(tt.name, func(t *testing.T) {
+			defer func() {
+				if r := recover(); r != nil {
+					t.Errorf("runSingleTest panicked on invalid regex: %v", r)
+				}
+			}()
+
+			testCase := config.TestCase{
+				Name:   "invalid-regex",
+				Exec:   []string{"echo", "hello"},
+				Expect: tt.expect,
+			}
+
+			result := runSingleTest(testCase, "docker", "alpine:latest", 30, false, false)
+
+			if result.Status != "FAILED" {
+				t.Errorf("Expected FAILED status, got %s (failures: %v)", result.Status, result.Failures)
+			}
+		})
 	}
 }
 
